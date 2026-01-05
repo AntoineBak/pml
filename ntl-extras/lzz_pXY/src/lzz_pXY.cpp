@@ -448,14 +448,17 @@ long resultant(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
     long d = max(dxf, dxg);
 
     long xtra = 2;
-    long dr = 2*n*d + xtra;
+    long batch = d+1;
+    long dr = 2*n*d;
+
+    long dr_div = (dr / batch) + xtra;
 
     Vec<zz_p> val_res, val_lcf, val_lcg;
     Vec<zz_pX> val_f, val_g;
 
-    val_res.SetLength(dr);
-    val_f.SetLength(dr);
-    val_g.SetLength(dr);
+    val_res.SetLength(dr_div*batch);
+    val_f.SetLength(batch);
+    val_g.SetLength(batch);
 
     zz_p a0, b0;
     long OK = 0;
@@ -467,10 +470,10 @@ long resultant(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
         OK = 1;
         a0 = random_zz_p();
         b0 = random_zz_p();
-        evG = zz_pX_Multipoint_Geometric(a0, b0, max(dxf, dxg)+1);
-        evG.evaluate(val_lcf, f.rep[dyf], dr);
-        evG.evaluate(val_lcg, g.rep[dyg], dr);
-        for (long i = 0; i < dr; i++)
+        evG = zz_pX_Multipoint_Geometric(a0, b0, d+1);
+        evG.evaluate(val_lcf, f.rep[dyf], dr_div*batch);
+        evG.evaluate(val_lcg, g.rep[dyg], dr_div*batch);
+        for (long i = 0; i < dr_div*batch; i++)
             if (val_lcf[i] == 0 || val_lcg[i] == 0)
             {
                 OK = 0;
@@ -481,33 +484,45 @@ long resultant(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
   
     if (nb == 5)
         return 0;
-
-    for (long i = 0; i < dr; i++)
+    
+    Vec<zz_p> tmp;
+    for (long i = 0; i < batch; i++)
     {
         val_f[i].rep.SetLength(dyf + 1);
-        val_f[i][dyf] = val_lcf[i];
         val_g[i].rep.SetLength(dyg + 1);
-        val_g[i][dyg] = val_lcg[i];
     }
 
-    Vec<zz_p> tmp;
-    for (long i = 0; i < dyf; i++)
+
+    for (long k = 0; k < dr_div; k++)
     {
-        evG.evaluate(tmp, f.rep[i], dr);
-        for (long j = 0; j < dr; j++)
-            val_f[j][i] = tmp[j];
-    }
-    for (long i = 0; i < dyg; i++)
-    {
-        evG.evaluate(tmp, g.rep[i], dr);
-        for (long j = 0; j < dr; j++)
-            val_g[j][i] = tmp[j];
-    }
+        zz_p tmp_a;
+        power(tmp_a, a0, 2*k*batch);
 
-    for (long i = 0; i < dr; i++)
-        resultant(val_res[i], val_f[i], val_g[i]);
 
-    zz_pX_Multipoint_Geometric evG_long(a0, b0, dr);
+        evG = zz_pX_Multipoint_Geometric(a0, b0*tmp_a, d+1);
+
+        for (long i = 0; i < dyf+1; i++)
+        {
+            evG.evaluate(tmp, f.rep[i], batch);
+            for (long j = 0; j < batch; j++)
+                val_f[j][i] = tmp[j];
+        }
+        for (long i = 0; i < dyg+1; i++)
+        {
+            evG.evaluate(tmp, g.rep[i], batch);
+            for (long j = 0; j < batch; j++)
+                val_g[j][i] = tmp[j];
+        }
+
+
+        for (long i = 0; i < batch; i++)
+        {
+            resultant(val_res[k*batch+i], val_f[i], val_g[i]);
+        }
+
+    }
+    
+    zz_pX_Multipoint_Geometric evG_long(a0, b0, dr_div*batch);
     evG_long.interpolate(res, val_res);
     return 1;
 }
@@ -528,14 +543,21 @@ long resultant_villard(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
 
     long xtra = 2;
     long m = (long) cbrt(n);
-    long delta = 2 * 2 * d * ((n + m - 1)/m) + xtra;
+    long batch = d+1;
+    long delta = 2 * 2 * d * ((n + m - 1)/m);
+
+    long delta_div = (delta / batch) + xtra;
 
 
-    Vec<zz_p> val_res, val_lcf, val_lcg;
+    Vec<zz_p> val_lcf, val_lcg;
     Vec<zz_pX> val_f, val_g;
 
-    val_f.SetLength(delta);
-    val_g.SetLength(delta);
+    val_f.SetLength(batch);
+    val_g.SetLength(batch);
+
+    // blocks have size mxm
+    Vec<Mat<zz_p>> blocks;
+    blocks.SetLength(delta_div*batch);
 
     zz_p a0, b0;
     long OK = 0;
@@ -546,11 +568,11 @@ long resultant_villard(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
         nb++;
         OK = 1;
         a0 = random_zz_p();
-        // TODO: add randomness by using b0 as well
-        evG = zz_pX_Multipoint_Geometric(a0, max(df, dg)+1);
-        evG.evaluate(val_lcf, f.rep[nf], delta);
-        evG.evaluate(val_lcg, g.rep[ng], delta);
-        for (long i = 0; i < delta; i++)
+        b0 = random_zz_p();
+        evG = zz_pX_Multipoint_Geometric(a0, b0, d+1);
+        evG.evaluate(val_lcf, f.rep[nf], delta_div*batch);
+        evG.evaluate(val_lcg, g.rep[ng], delta_div*batch);
+        for (long i = 0; i < delta_div*batch; i++)
             if (val_lcf[i] == 0 || val_lcg[i] == 0)
             {
                 OK = 0;
@@ -562,46 +584,51 @@ long resultant_villard(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
     if (nb == 5)
         return 0;
 
-    for (long i = 0; i < delta; i++)
+    Vec<zz_p> tmp;
+    for (long i = 0; i < batch; i++)
     {
         val_f[i].rep.SetLength(nf + 1);
-        val_f[i][nf] = val_lcf[i];
         val_g[i].rep.SetLength(ng + 1);
-        val_g[i][ng] = val_lcg[i];
     }
 
-    Vec<zz_p> tmp;
-    for (long i = 0; i < nf; i++)
-    {
-        evG.evaluate(tmp, f.rep[i], delta);
-        for (long j = 0; j < delta; j++)
-            val_f[j][i] = tmp[j];
-    }
-    for (long i = 0; i < ng; i++)
-    {
-        evG.evaluate(tmp, g.rep[i], delta);
-        for (long j = 0; j < delta; j++)
-            val_g[j][i] = tmp[j];
-    }
 
-    // blocks have size mxm
-    Vec<Mat<zz_p>> blocks;
-    blocks.SetLength(delta);
-    for (long i = 0; i < delta; i++)
+    for (long k = 0; k < delta_div; k++)
     {
-        sylvester_lzz_p S(val_f[i], val_g[i]);
-        long r = S.top_right_block_inverse(blocks[i], m);
-        if (r == 0)
-            return 0;
+        zz_p tmp_a;
+        power(tmp_a, a0, 2*k*batch);
+
+        evG = zz_pX_Multipoint_Geometric(a0, b0*tmp_a, d+1);
+
+        for (long i = 0; i < nf+1; i++)
+        {
+            evG.evaluate(tmp, f.rep[i], batch);
+            for (long j = 0; j < batch; j++)
+                val_f[j][i] = tmp[j];
+        }
+        for (long i = 0; i < ng+1; i++)
+        {
+            evG.evaluate(tmp, g.rep[i], batch);
+            for (long j = 0; j < batch; j++)
+                val_g[j][i] = tmp[j];
+        }
+
+        for (long i = 0; i < batch; i++)
+        {
+            sylvester_lzz_p S(val_f[i], val_g[i]);
+            long r = S.top_right_block_inverse(blocks[k*batch+i], m);
+            if (r == 0)
+                return 0;
+        }
     }
 
     Mat<zz_pX> basis;
 
     // set up pts
+    zz_pX_Multipoint_Geometric evG_long(a0, b0, delta_div*batch);
     zz_pX x;
     SetCoeff(x, 1, 1);
     Vec<zz_p> pts;
-    evG.evaluate(pts, x, delta); // just gets powers of r
+    evG_long.evaluate(pts, x, delta); // just gets powers of r
 
     if (0)
         matrix_recon_interpolation(basis, pts, blocks);
@@ -617,14 +644,16 @@ long resultant_villard_tdeg(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
     // y-degrees
     long nf = f.degY();
     long ng = g.degY();
+    long n = max(nf, ng);
 
+    long xtra = 2;
     // expected resultant degree
     long res_deg = f.tdeg() * g.tdeg();
 
     // block projection parameters:
     // block-size m and expansion length 1 + 2*ceil(d/m)
     long m = (long) cbrt((nf+ng)/2);  // FIXME allow handpicked exponent
-    long d = 1 + nf+ng + 2 * (res_deg+m-1) / m;
+    long delta = 1 + nf+ng + 2 * (res_deg+m-1) / m;
 
     /* std::cout << "res deg: " << res_deg << std::endl; */
     /* std::cout << "Sylvester dim: " << nf+ng << std::endl; */
@@ -637,12 +666,19 @@ long resultant_villard_tdeg(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
         return 0;
     // FIXME if strange issue while debugging, think
     // about checking that m >= 1 (or even m >= 2?)
+    long batch = n+1;
+    long delta_div = (delta / batch) + xtra;
 
-    Vec<zz_p> val_res, val_lcf, val_lcg;
+
+    Vec<zz_p> val_lcf, val_lcg;
     Vec<zz_pX> val_f, val_g;
 
-    val_f.SetLength(d);
-    val_g.SetLength(d);
+    val_f.SetLength(batch);
+    val_g.SetLength(batch);
+
+    // blocks have size mxm
+    Vec<Mat<zz_p>> blocks;
+    blocks.SetLength(delta_div*batch);
 
     zz_p a0, b0;
     long OK = 0;
@@ -653,11 +689,11 @@ long resultant_villard_tdeg(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
         nb++;
         OK = 1;
         a0 = random_zz_p();
-        // TODO: add randomness by using b0 as well
-        evG = zz_pX_Multipoint_Geometric(a0, max(f.degX(), g.degX())+1);
-        evG.evaluate(val_lcf, f.rep[nf], d);
-        evG.evaluate(val_lcg, g.rep[ng], d);
-        for (long i = 0; i < d; i++)
+        b0 = random_zz_p();
+        evG = zz_pX_Multipoint_Geometric(a0, b0, n+1);
+        evG.evaluate(val_lcf, f.rep[nf], delta_div*batch);
+        evG.evaluate(val_lcg, g.rep[ng], delta_div*batch);
+        for (long i = 0; i < delta_div*batch; i++)
             if (val_lcf[i] == 0 || val_lcg[i] == 0)
             {
                 OK = 0;
@@ -669,52 +705,57 @@ long resultant_villard_tdeg(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
     if (nb == 5)
         return 0;
 
-    for (long i = 0; i < d; i++)
+    Vec<zz_p> tmp;
+    for (long i = 0; i < batch; i++)
     {
         val_f[i].rep.SetLength(nf + 1);
-        val_f[i][nf] = val_lcf[i];
         val_g[i].rep.SetLength(ng + 1);
-        val_g[i][ng] = val_lcg[i];
     }
 
-    Vec<zz_p> tmp;
-    for (long i = 0; i < nf; i++)
-    {
-        evG.evaluate(tmp, f.rep[i], d);
-        for (long j = 0; j < d; j++)
-            val_f[j][i] = tmp[j];
-    }
-    for (long i = 0; i < ng; i++)
-    {
-        evG.evaluate(tmp, g.rep[i], d);
-        for (long j = 0; j < d; j++)
-            val_g[j][i] = tmp[j];
-    }
 
-    // blocks have size mxm
-    Vec<Mat<zz_p>> blocks;
-    blocks.SetLength(d);
-    for (long i = 0; i < d; i++)
+    for (long k = 0; k < delta_div; k++)
     {
-        sylvester_lzz_p S(val_f[i], val_g[i]);
-        long r = S.top_right_block_inverse(blocks[i], m);
-        if (r == 0)
-            return 0;
+        zz_p tmp_a;
+        power(tmp_a, a0, 2*k*batch);
+
+        evG = zz_pX_Multipoint_Geometric(a0, b0*tmp_a, n+1);
+
+        for (long i = 0; i < nf+1; i++)
+        {
+            evG.evaluate(tmp, f.rep[i], batch);
+            for (long j = 0; j < batch; j++)
+                val_f[j][i] = tmp[j];
+        }
+        for (long i = 0; i < ng+1; i++)
+        {
+            evG.evaluate(tmp, g.rep[i], batch);
+            for (long j = 0; j < batch; j++)
+                val_g[j][i] = tmp[j];
+        }
+
+        for (long i = 0; i < batch; i++)
+        {
+            sylvester_lzz_p S(val_f[i], val_g[i]);
+            long r = S.top_right_block_inverse(blocks[k*batch+i], m);
+            if (r == 0)
+                return 0;
+        }
     }
 
     Mat<zz_pX> basis;
 
     // set up pts
+    zz_pX_Multipoint_Geometric evG_long(a0, b0, delta_div*batch);
     zz_pX x;
     SetCoeff(x, 1, 1);
     Vec<zz_p> pts;
-    evG.evaluate(pts, x, d); // just gets powers of r
+    evG_long.evaluate(pts, x, delta); // just gets powers of r
 
     // uniform shift (0,..,0)
     VecLong shift(2*m);
 
     // add identity at the bottom of each matrix in sequence
-    for (long j = 0; j < d; j++)
+    for (long j = 0; j < delta; j++)
     {
         blocks[j].SetDims(2*m, m);
         for (long i = 0; i < m; i++)
@@ -723,7 +764,7 @@ long resultant_villard_tdeg(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
 
     // call pmbasis
     Mat<zz_pX> intbas;
-    pmbasis_geometric(intbas, blocks, pts, a0, shift, 0, d);
+    pmbasis_geometric(intbas, blocks, pts, a0, shift, 0, delta);
     /* std::cout << degree_matrix(intbas) << std::endl; */
 
     basis.SetDims(m, m);
