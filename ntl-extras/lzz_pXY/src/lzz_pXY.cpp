@@ -652,7 +652,7 @@ long resultant_villard_tdeg(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
 
     // block projection parameters:
     // block-size m and expansion length 1 + 2*ceil(d/m)
-    long m = (long) cbrt((nf+ng)/2);  // FIXME allow handpicked exponent
+    long m = (long) cbrt((nf+ng) * log(nf + ng));  // FIXME allow handpicked exponent
     long delta = 1 + nf+ng + 2 * (res_deg+m-1) / m;
 
     /* std::cout << "res deg: " << res_deg << std::endl; */
@@ -712,6 +712,7 @@ long resultant_villard_tdeg(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
         val_g[i].rep.SetLength(ng + 1);
     }
 
+    double t1 = GetWallTime();
 
     for (long k = 0; k < delta_div; k++)
     {
@@ -742,6 +743,10 @@ long resultant_villard_tdeg(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
         }
     }
 
+    std::cout << "Time for top-right inverses:\t" << GetWallTime() - t1 << std::endl;
+
+    t1 = GetWallTime();
+
     Mat<zz_pX> basis;
 
     // set up pts
@@ -762,18 +767,13 @@ long resultant_villard_tdeg(zz_pX& res, const zz_pXY& f, const zz_pXY& g)
             set(blocks[j][m+i][i]);
     }
 
-    // call pmbasis
-    Mat<zz_pX> intbas;
-    pmbasis_geometric(intbas, blocks, pts, a0, shift, 0, delta);
+    pmbasis_geometric_bot_left(basis, blocks, pts, a0, shift, 0, delta);
     /* std::cout << degree_matrix(intbas) << std::endl; */
-
-    basis.SetDims(m, m);
-    for (long i = 0; i < m; ++i)
-        for (long j = 0; j < m; ++j)
-            basis[i][j].swap(intbas[i+m][j]);
 
     /* std::cout << degree_matrix(basis) << std::endl; */
     determinant_via_linsolve(res, basis);  /* randomized! */
+
+    std::cout << "Time for linear algebra:\t" << GetWallTime() - t1 << std::endl;
 
     // TODO we may want to fix the missing constant factor
     // for this, retrieve the leading term via the determinant

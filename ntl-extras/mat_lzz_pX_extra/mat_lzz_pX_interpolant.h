@@ -453,6 +453,27 @@ void pmbasis_geometric(
                        long order
                       );
 
+/** Computes a `shift`-ordered weak Popov interpolant basis `intbas` for
+ * `(pmat,pts)` (see @ref PMBasisInt), where the points `pts` are geometric
+ * sequence defined by `r` and length `order`, and `evals` is the list of
+ * evaluations of `pmat` at these points. The positive integers `offset` and
+ * `order` indicate that we consider the entries `offset, offset+1, ..,
+ * offset+order-1` of `evals` and `pts` (no check is performed to verify that
+ * these indices stay within the allowed bounds).
+ *
+ * Note that `evals` is not `const`.
+ *
+ * Only the bottom-left quadrant of the matrix is returned
+ * 
+ **/
+void pmbasis_geometric_bot_left(
+                                Mat<zz_pX>& bot_left,
+                                Vec<Mat<zz_p>>& evals,
+                                const Vec<zz_p>& pts,
+                                const zz_p& r,
+                                VecLong& shift,
+                                long offset,
+                                long order);
 
 /** Computes a `shift`-ordered weak Popov interpolant basis `intbas` for
  * `(pmat,pts)`, where `evals` is the list of evaluations of `pmat` at these

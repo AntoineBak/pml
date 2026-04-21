@@ -1273,6 +1273,170 @@ void pmbasis_geometric(
 }
 
 
+static void extract_left_cols(Mat<zz_pX>& out, const Mat<zz_pX>& full)
+{
+    const long two_m = full.NumRows();
+    const long m = two_m / 2;
+    out.SetDims(two_m, m);
+    
+    for (long i = 0; i < two_m; ++i)
+        for (long j = 0; j < m; ++j)
+            out[i][j] = full[i][j];
+}
+
+
+static void extract_bot_rows(Mat<zz_pX>& out, const Mat<zz_pX>& full)
+{
+    const long m = full.NumRows() / 2;
+    const long two_m = full.NumCols();
+    out.SetDims(m, two_m);
+    
+    for (long i = 0; i < m; ++i)
+        for (long j = 0; j < two_m; ++j)
+            out[i][j] = full[i+m][j];
+}
+
+static void first_half_full(
+    Mat<zz_pX>& intbas1,
+    Vec<Mat<zz_p>>& evals,
+    const Vec<zz_p>& pts,
+    const zz_p& r,
+    VecLong& shift,
+    long offset,
+    long order1,
+    long offset2,
+    long order2)
+{
+    pmbasis_geometric(intbas1, evals, pts, r, shift, offset, order1);
+
+    for (long k = offset; k < offset2; ++k)
+        evals[k].kill();
+
+    zz_pX_Multipoint_Geometric ev(r, pts[offset2], order2 + 1);
+    Vec<Mat<zz_p>>* intbas1_eval = new Vec<Mat<zz_p>>();
+    ev.evaluate_matrix(*intbas1_eval, intbas1);
+
+    for (long k = offset2; k < offset2 + order2; ++k)
+        mul(evals[k], (*intbas1_eval)[k - offset2], evals[k]);
+    delete intbas1_eval;
+}
+
+
+void pmbasis_geometric_left(
+    Mat<zz_pX>& left_col,
+    Vec<Mat<zz_p>>& evals,
+    const Vec<zz_p>& pts,
+    const zz_p& r,
+    VecLong& shift,
+    long offset,
+    long order)
+{
+    if (order <= 32)
+    {
+        Mat<zz_pX> full;
+        mbasis(full, evals, pts, shift, offset, order);
+        extract_left_cols(left_col, full);
+        return;
+    }
+
+    const long order1  = order / 2;
+    const long offset2 = offset + order1;
+    const long order2  = order - order1;
+
+    Mat<zz_pX> intbas1;
+    first_half_full(intbas1, evals, pts, r, shift, offset, order1, offset2, order2);
+
+    Mat<zz_pX> intbas2;
+    pmbasis_geometric(intbas2, evals, pts, r, shift, offset2, order2);
+
+    for (long k = offset2; k < offset2 + order2; ++k)
+        evals[k].kill();
+
+    Mat<zz_pX> left_col1;  // 2m×m
+    extract_left_cols(left_col1, intbas1);
+    multiply(left_col, intbas2, left_col1);   
+}
+
+void pmbasis_geometric_bot(
+    Mat<zz_pX>& bot_row,
+    Vec<Mat<zz_p>>& evals,
+    const Vec<zz_p>& pts,
+    const zz_p& r,
+    VecLong& shift,
+    long offset,
+    long order)
+{
+    if (order <= 32)
+    {
+        Mat<zz_pX> full;
+        mbasis(full, evals, pts, shift, offset, order);
+        extract_bot_rows(bot_row, full);
+        return;
+    }
+
+    const long order1  = order / 2;
+    const long offset2 = offset + order1;
+    const long order2  = order - order1;
+
+    // First half: full basis (intbas1 kept — needed for the final multiply)
+    // shift updated in-place
+    Mat<zz_pX> intbas1;
+    first_half_full(intbas1, evals, pts, r, shift, offset, order1, offset2, order2);
+
+    Mat<zz_pX> bot_row2;  // m×2m
+    pmbasis_geometric_bot(
+        bot_row2, evals, pts, r, shift, offset2, order2);
+
+    for (long k = offset2; k < offset2 + order2; ++k)
+        evals[k].kill();
+
+    multiply(bot_row, bot_row2, intbas1);
+}
+
+
+void pmbasis_geometric_bot_left(
+    Mat<zz_pX>& bot_left,
+    Vec<Mat<zz_p>>& evals,
+    const Vec<zz_p>& pts,
+    const zz_p& r,
+    VecLong& shift,
+    long offset,
+    long order)
+{
+    if (order <= 32)
+    {
+        Mat<zz_pX> full;
+        mbasis(full, evals, pts, shift, offset, order);
+        long m = full.NumRows() / 2;
+        bot_left.SetDims(m, m);
+        
+        for (long i = 0; i < m; ++i)
+            for (long j = 0; j < m; ++j)
+                bot_left[i][j] = full[i+m][j];
+        return;
+    }
+
+    const long order1  = order / 2;
+    const long offset2 = offset + order1;
+    const long order2  = order - order1;
+
+    Mat<zz_pX> intbas1;
+    first_half_full(intbas1, evals, pts, r, shift, offset, order1, offset2, order2);
+
+    Mat<zz_pX> bot_row2;   // m×2m
+    pmbasis_geometric_bot(
+        bot_row2, evals, pts, r, shift, offset2, order2);
+
+    for (long k = offset2; k < offset2 + order2; ++k)
+        evals[k].kill();
+
+    Mat<zz_pX> left_col1; 
+    extract_left_cols(left_col1, intbas1);
+
+    multiply(bot_left, bot_row2, left_col1);
+}
+
+
 void pmbasis(
              Mat<zz_pX> & intbas,
              const Mat<zz_pX> & pmat,
